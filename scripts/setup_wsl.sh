@@ -7,6 +7,7 @@ CODE_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 VENV_DIR="$RUNTIME_ROOT/.venv"
 REPO_DIR="$RUNTIME_ROOT/repos/CosyVoice"
 MODEL_DIR="$RUNTIME_ROOT/models/Fun-CosyVoice3-0.5B"
+SPEAKER_MODEL_DIR="$RUNTIME_ROOT/models/sepformer-wsj02mix"
 COSYVOICE_COMMIT="074ca6dc9e80a2f424f1f74b48bdd7d3fea531cc"
 BIN_DIR="$RUNTIME_ROOT/bin"
 export PATH="$BIN_DIR:$PATH"
@@ -112,6 +113,17 @@ PY
   python - <<'PY'
 from faster_whisper.utils import download_model
 download_model("large-v3-turbo")
+PY
+  echo "[ENV] Descargando SepFormer para voces simultáneas"
+  SPEAKER_MODEL_DIR="$SPEAKER_MODEL_DIR" python - <<'PY'
+import os
+from speechbrain.inference.separation import SepformerSeparation
+
+SepformerSeparation.from_hparams(
+    source="speechbrain/sepformer-wsj02mix",
+    savedir=os.environ["SPEAKER_MODEL_DIR"],
+    run_opts={"device": "cpu"},
+)
 PY
 fi
 

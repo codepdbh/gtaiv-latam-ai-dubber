@@ -20,6 +20,7 @@ def assert_models_ready(config: dict, models: ModelManager) -> None:
     for key, label in (
         ("ffmpeg", "FFmpeg/ffprobe"), ("cuda", "PyTorch CUDA"),
         ("faster_whisper", "faster-whisper"), ("demucs", "Demucs"),
+        ("speaker_separation", "SpeechBrain/SepFormer"),
         ("cosyvoice", "CosyVoice 3"),
     ):
         if not environment[key]:

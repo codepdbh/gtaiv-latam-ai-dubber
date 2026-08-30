@@ -8,7 +8,8 @@ from pathlib import Path
 from gtaiv_dubber.audio.metadata import read_wav_metadata
 from gtaiv_dubber.audio.validation import validate_wav
 from gtaiv_dubber.core.database import Database
-from gtaiv_dubber.core.state import Status
+from gtaiv_dubber.core.config import relevant_config_hash
+from gtaiv_dubber.core.state import REVIEW_STATUSES, Status
 from gtaiv_dubber.utils.atomic import atomic_copy_wav
 from gtaiv_dubber.utils.hashing import sha256_file
 from gtaiv_dubber.utils.paths import mode_paths, safe_output_path
@@ -33,7 +34,9 @@ class BasePipeline:
         self.models = models
         self.runtime = runtime
         self.logger = logger or logging.getLogger("gtaiv_dubber")
-        self.config_hash = config["_config_hash"]
+        self.config_hash = (
+            relevant_config_hash(config, self.mode) if self.mode else config["_config_hash"]
+        )
 
     def _prepare(self, row) -> tuple[Path, Path, str]:
         input_root, output_root = mode_paths(self.root, self.config, self.mode)
@@ -45,7 +48,7 @@ class BasePipeline:
         return source, destination, digest
 
     def should_skip(self, row, digest: str) -> bool:
-        if row["status"] != Status.DONE:
+        if row["status"] not in {Status.DONE, *(status.value for status in REVIEW_STATUSES)}:
             return False
         if row["sha256"] != digest or row["config_hash"] != self.config_hash:
             return False
@@ -84,7 +87,9 @@ class BasePipeline:
             source, destination, digest = self._prepare(row)
             if self.should_skip(row, digest):
                 self.logger.info("[SKIP] %s", row["relative_path"])
-                return ProcessResult(Status.DONE, row["relative_path"], "SKIP", time.monotonic() - started)
+                return ProcessResult(
+                    Status(row["status"]), row["relative_path"], "SKIP", time.monotonic() - started
+                )
             result = self._process(row, source, destination, digest)
             result.elapsed = time.monotonic() - started
             return result

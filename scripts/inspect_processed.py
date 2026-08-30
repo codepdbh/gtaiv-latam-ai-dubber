@@ -32,7 +32,7 @@ def main() -> int:
             original = read_wav_metadata(source)
             output_meta = read_wav_metadata(output) if output.is_file() else None
             validation = validate_wav(
-                output, original, exact_frames=row["mode"] == "cutscene"
+                output, original, exact_frames=True
             )
             segment_statuses = []
             if row["mode"] == "cutscene":

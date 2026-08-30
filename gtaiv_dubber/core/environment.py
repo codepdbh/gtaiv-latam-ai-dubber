@@ -35,6 +35,7 @@ def inspect_environment(config: dict | None = None) -> dict:
         "vram_bytes": 0,
         "faster_whisper": False,
         "demucs": False,
+        "speaker_separation": False,
         "cosyvoice": False,
         "ollama": False,
     }
@@ -48,7 +49,11 @@ def inspect_environment(config: dict | None = None) -> dict:
             result["vram_bytes"] = int(torch.cuda.get_device_properties(0).total_memory)
     except Exception as exc:
         result["torch_error"] = str(exc)
-    for package, key in (("faster_whisper", "faster_whisper"), ("demucs", "demucs")):
+    for package, key in (
+        ("faster_whisper", "faster_whisper"),
+        ("demucs", "demucs"),
+        ("speechbrain", "speaker_separation"),
+    ):
         try:
             __import__(package)
             result[key] = True
@@ -81,7 +86,7 @@ def format_environment(result: dict) -> str:
             f"Qwen3/Ollama:    {ok(result['ollama'])}",
             f"CosyVoice 3:     {ok(result['cosyvoice'])}",
             f"Demucs:          {ok(result['demucs'])}",
+            f"SepFormer:       {ok(result['speaker_separation'])}",
             "========================================",
         ]
     )
-

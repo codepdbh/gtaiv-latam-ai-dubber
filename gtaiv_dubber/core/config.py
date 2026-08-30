@@ -35,8 +35,15 @@ def load_config(project_root: Path, config_path: Path | None = None) -> dict[str
     return config
 
 
-def relevant_config_hash(config: dict[str, Any]) -> str:
+def relevant_config_hash(config: dict[str, Any], mode: str | None = None) -> str:
     clean = {k: v for k, v in config.items() if not k.startswith("_")}
+    if mode is not None:
+        common = {
+            "project", "language", "glossary", "whisper", "ollama", "cosyvoice",
+            "audio", "alignment", "processing",
+        }
+        mode_only = {"cutscenes", "demucs", "speaker_separation"} if mode == "cutscene" else set()
+        clean = {key: value for key, value in clean.items() if key in common | mode_only}
     payload = json.dumps(clean, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -46,4 +53,3 @@ def load_glossary(config: dict[str, Any]) -> dict[str, str]:
     with path.open("r", encoding="utf-8") as handle:
         values = yaml.safe_load(handle) or {}
     return {str(key): str(value) for key, value in values.items()}
-

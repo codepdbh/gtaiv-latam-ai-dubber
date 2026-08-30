@@ -19,6 +19,16 @@ def test_config_loading_and_hash(sample_project):
     assert relevant_config_hash(config) == relevant_config_hash(config)
 
 
+def test_speech_hash_ignores_cutscene_only_options(sample_project):
+    config = load_config(sample_project)
+    speech_before = relevant_config_hash(config, "speech")
+    cutscene_before = relevant_config_hash(config, "cutscene")
+    config["cutscenes"]["vocal_attenuation"] = 0.5
+    config["speaker_separation"]["enabled"] = False
+    assert relevant_config_hash(config, "speech") == speech_before
+    assert relevant_config_hash(config, "cutscene") != cutscene_before
+
+
 def test_corrupt_input_metadata(tmp_path):
     path = tmp_path / "bad.wav"
     path.write_bytes(b"not a wav")
@@ -91,4 +101,6 @@ def test_resume_ignores_foreign_absolute_output_path(sample_project):
     }
     pipeline = BasePipeline(sample_project, config, None, None, {})
     pipeline.mode = "speech"
+    assert pipeline.should_skip(row, digest)
+    row["status"] = Status.REVIEW_DURATION
     assert pipeline.should_skip(row, digest)

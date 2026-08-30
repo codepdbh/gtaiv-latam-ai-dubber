@@ -25,6 +25,14 @@ demucs:
   model: htdemucs
   device: cuda
 
+speaker_separation:
+  # SepFormer separa hasta dos voces simultáneas. CPU es más lento pero no
+  # compite por VRAM; usa cuda sólo si tienes memoria suficiente.
+  enabled: true
+  model_id: speechbrain/sepformer-wsj02mix
+  model_dir: ~/.local/share/gtaiv-latam-ai-dubber/models/sepformer-wsj02mix
+  device: cpu
+
 audio:
   output_bit_depth: 16
   peak_limit_dbfs: -1.0

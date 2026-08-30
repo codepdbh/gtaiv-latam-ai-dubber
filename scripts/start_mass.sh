@@ -13,9 +13,16 @@ source "$RUNTIME_ROOT/.venv/bin/activate"
 export PATH="$RUNTIME_ROOT/bin:$PATH"
 export PYTHONPATH="$CODE_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
+process_is_active() {
+  local pid="$1" state
+  kill -0 "$pid" 2>/dev/null || return 1
+  state="$(ps -o stat= -p "$pid" 2>/dev/null | tr -d ' ')"
+  [[ -n "$state" && "$state" != Z* ]]
+}
+
 if [[ -s "$PID_FILE" ]]; then
   existing_pid="$(<"$PID_FILE")"
-  if kill -0 "$existing_pid" 2>/dev/null; then
+  if process_is_active "$existing_pid"; then
     echo "El procesamiento masivo ya está activo (PID $existing_pid)."
     [[ -s "$LOG_POINTER" ]] && echo "Log: $(<"$LOG_POINTER")"
     exit 0
@@ -45,7 +52,7 @@ mass_pid=$!
 printf '%s\n' "$mass_pid" >"$PID_FILE"
 printf '%s\n' "$run_log" >"$LOG_POINTER"
 sleep 2
-if ! kill -0 "$mass_pid" 2>/dev/null; then
+if ! process_is_active "$mass_pid"; then
   echo "ERROR: el proceso terminó durante el arranque."
   tail -n 80 "$run_log"
   exit 1
@@ -53,4 +60,3 @@ fi
 
 echo "Procesamiento masivo iniciado (PID $mass_pid)."
 echo "Log: $run_log"
-

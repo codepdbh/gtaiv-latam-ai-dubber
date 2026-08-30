@@ -5,6 +5,7 @@ import gc
 from gtaiv_dubber.ai.cosyvoice_adapter import CosyVoiceAdapter
 from gtaiv_dubber.ai.demucs_adapter import DemucsAdapter
 from gtaiv_dubber.ai.qwen_adapter import QwenAdapter
+from gtaiv_dubber.ai.speaker_separator_adapter import SpeakerSeparatorAdapter
 from gtaiv_dubber.ai.whisper_adapter import WhisperAdapter
 
 
@@ -14,6 +15,9 @@ class ModelManager:
         self.qwen = QwenAdapter(config["ollama"], glossary)
         self.cosyvoice = CosyVoiceAdapter(config["cosyvoice"])
         self.demucs = DemucsAdapter(config["demucs"], stems_root)
+        self.speaker_separator = SpeakerSeparatorAdapter(
+            config.get("speaker_separation", {}), stems_root
+        )
 
     @staticmethod
     def clear_cuda() -> None:
@@ -34,3 +38,6 @@ class ModelManager:
         self.cosyvoice.unload()
         self.clear_cuda()
 
+    def unload_speaker_separator(self) -> None:
+        self.speaker_separator.unload()
+        self.clear_cuda()

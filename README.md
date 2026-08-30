@@ -24,14 +24,16 @@ Creado por **Paulo Daniel Batuani Hurtado**<br>
 El pipeline trabaja completamente en tu PC:
 
 ```text
-WAV original → Whisper → adaptación al español → clonación de voz → ajuste temporal → WAV final
-                                      ↘ Demucs para preservar música/SFX en cutscenes ↗
+WAV original → Whisper → adaptación → clonación → ajuste temporal → WAV final
+            ↘ Demucs (voz/fondo) → SepFormer (hablante A/B) ↗
 ```
 
 - Transcribe el diálogo inglés con [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
 - Lo adapta a español latino neutral mediante [Ollama](https://ollama.com/) y Qwen.
 - Conserva la identidad vocal con [CosyVoice 3](https://github.com/FunAudioLLM/CosyVoice).
 - En cutscenes separa voz y fondo con [Demucs](https://github.com/facebookresearch/demucs).
+- Separa hasta dos voces simultáneas con
+  [SpeechBrain SepFormer](https://huggingface.co/speechbrain/sepformer-wsj02mix).
 - Reanuda trabajos interrumpidos con SQLite y valida cada resultado antes de publicarlo.
 - Incluye CLI, interfaz PySide6, canarios previos y reportes JSON/CSV.
 
@@ -270,15 +272,26 @@ de frames idénticos al archivo original.
 ### Varias personas en una cutscene
 
 Cuando los personajes hablan por turnos, Whisper crea intervalos separados y cada intervalo
-usa su propia referencia vocal; CosyVoice intenta conservar la voz del personaje presente en
-ese momento. El contexto anterior y posterior se utiliza para mantener coherencia al traducir.
+usa su propia referencia vocal. Cuando **dos personas hablan a la vez**, SepFormer divide el
+stem vocal en dos fuentes y Whisper vuelve a transcribirlas por separado. El sistema rechaza
+una segunda fuente casi silenciosa o con texto duplicado —señales habituales de filtración—,
+clona cada voz válida y suma ambos doblajes en su intervalo compartido.
 
-El caso difícil es cuando **dos personas hablan a la vez**. La versión actual detecta
-segmentos solapados y marca el archivo como `REVIEW_OVERLAP`, pero no incluye diarización ni
-separación independiente por hablante. En esos tramos puede mezclarse la identidad vocal o
-quedar una voz dominante. Conviene revisarlos manualmente. Resolverlo de forma automática
-requiere una etapa futura de diarización/separación por hablante y síntesis de cada voz en una
-pista distinta antes de recomponer los canales.
+La voz inglesa combinada se proyecta sobre los canales físicos, se retira una sola vez al
+100% y después se agregan las voces nuevas. Esto evita tanto el inglés residual como la doble
+sustracción que produciría un solapamiento. Los resultados simultáneos conservan el estado
+`REVIEW_OVERLAP` para facilitar una escucha humana: el modelo abierto está entrenado para dos
+hablantes en inglés y no garantiza separar correctamente tres voces, gritos muy breves o
+diálogo cubierto por efectos fuertes.
+
+SepFormer usa CPU por defecto para no competir con Whisper/CosyVoice en una GPU de 8 GB. En
+equipos con más VRAM se puede probar:
+
+```yaml
+speaker_separation:
+  enabled: true
+  device: cuda
+```
 
 ## Desarrollo
 

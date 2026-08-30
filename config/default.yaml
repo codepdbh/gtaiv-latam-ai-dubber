@@ -35,6 +35,18 @@ demucs:
   model: htdemucs
   device: cuda
 
+speaker_separation:
+  enabled: true
+  model_id: speechbrain/sepformer-wsj02mix
+  model_dir: ~/.local/share/gtaiv-latam-ai-dubber/models/sepformer-wsj02mix
+  # CPU evita competir por los 8 GB de VRAM con Whisper y CosyVoice.
+  device: cpu
+  min_overlap_seconds: 0.20
+  min_source_rms_ratio: 0.12
+  duplicate_similarity: 0.72
+  activity_threshold: 0.15
+  max_source_correlation: 0.25
+
 audio:
   output_bit_depth: 16
   peak_limit_dbfs: -1.0
@@ -50,10 +62,9 @@ cutscenes:
   preserve_channel_order: true
   exact_frame_count: true
   reference_padding_seconds: 0.75
-  vocal_attenuation: 0.75
+  vocal_attenuation: 1.0
 
 processing:
   resume: true
   safe_fallback: true
   cuda_oom_retries: 1
-
