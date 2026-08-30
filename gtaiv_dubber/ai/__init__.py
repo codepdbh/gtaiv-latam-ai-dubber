@@ -1,0 +1,2 @@
+"""Adaptadores de IA locales."""
+

@@ -1,0 +1,59 @@
+project:
+  cutscenes_dir: Cutscenes
+  speech_dir: Speech
+  cutscenes_output: Cutscenes_es
+  speech_output: Speech_es
+
+language:
+  source: en
+  target: es-419
+
+glossary:
+  path: config/glossary.yaml
+
+whisper:
+  model: large-v3-turbo
+  device: cuda
+  compute_type: float16
+  beam_size: 5
+  vad_filter: true
+  download_root: ~/.cache/huggingface/hub
+
+ollama:
+  model: qwen3:8b
+  host: http://127.0.0.1:11434
+  timeout_seconds: 180
+
+cosyvoice:
+  model: Fun-CosyVoice3-0.5B
+  model_id: FunAudioLLM/Fun-CosyVoice3-0.5B-2512
+  repo_dir: ~/.local/share/gtaiv-latam-ai-dubber/repos/CosyVoice
+  model_dir: ~/.local/share/gtaiv-latam-ai-dubber/models/Fun-CosyVoice3-0.5B
+  device: cuda
+
+demucs:
+  model: htdemucs
+  device: cuda
+
+audio:
+  output_bit_depth: 16
+  peak_limit_dbfs: -1.0
+
+alignment:
+  excellent_pct: 5
+  automatic_pct: 10
+  warning_pct: 20
+  translation_regeneration_attempts: 1
+
+cutscenes:
+  preserve_background: true
+  preserve_channel_order: true
+  exact_frame_count: true
+  reference_padding_seconds: 0.75
+  vocal_attenuation: 0.75
+
+processing:
+  resume: true
+  safe_fallback: true
+  cuda_oom_retries: 1
+

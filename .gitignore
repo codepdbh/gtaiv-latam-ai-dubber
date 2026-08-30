@@ -1,0 +1,41 @@
+# Entornos, paquetes y cachés de Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Configuración privada de cada instalación
+config/local.yaml
+.env
+.env.*
+!.env.example
+
+# Audio original de GTA IV: nunca debe entrar al repositorio
+/Speech/
+/Cutscenes/
+
+# Audio generado
+/Speech_es/
+/Cutscenes_es/
+
+# Estado, temporales, modelos, reportes y registros locales
+/work/*
+!/work/.gitkeep
+/logs/*
+!/logs/.gitkeep
+*.sqlite3
+*.log
+*.pid
+
+# Editores y sistema operativo
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini

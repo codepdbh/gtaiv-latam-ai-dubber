@@ -1,0 +1,2 @@
+"""Núcleo de la aplicación."""
+

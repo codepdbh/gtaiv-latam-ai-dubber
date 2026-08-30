@@ -1,0 +1,37 @@
+from __future__ import annotations
+
+from enum import Enum
+
+
+class Mode(str, Enum):
+    SPEECH = "speech"
+    CUTSCENE = "cutscene"
+
+
+class Status(str, Enum):
+    DISCOVERED = "DISCOVERED"
+    ANALYZING = "ANALYZING"
+    TRANSCRIBED = "TRANSCRIBED"
+    TRANSLATED = "TRANSLATED"
+    GENERATED = "GENERATED"
+    ALIGNED = "ALIGNED"
+    MIXED = "MIXED"
+    EXPORTED = "EXPORTED"
+    DONE = "DONE"
+    REVIEW_ASR = "REVIEW_ASR"
+    REVIEW_DURATION = "REVIEW_DURATION"
+    REVIEW_OVERLAP = "REVIEW_OVERLAP"
+    REVIEW_REFERENCE = "REVIEW_REFERENCE"
+    REVIEW_AUDIO = "REVIEW_AUDIO"
+    FALLBACK = "FALLBACK"
+    ERROR = "ERROR"
+
+
+FINAL_STATUSES = {Status.DONE, Status.FALLBACK}
+REVIEW_STATUSES = {
+    Status.REVIEW_ASR,
+    Status.REVIEW_DURATION,
+    Status.REVIEW_OVERLAP,
+    Status.REVIEW_REFERENCE,
+    Status.REVIEW_AUDIO,
+}

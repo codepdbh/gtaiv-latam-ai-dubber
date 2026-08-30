@@ -1,0 +1,30 @@
+# Copia este archivo como config/local.yaml y cambia solamente lo necesario.
+# local.yaml está ignorado por Git y se combina con config/default.yaml.
+
+whisper:
+  # faster-whisper descarga automáticamente los modelos compatibles.
+  model: large-v3-turbo
+  device: cuda
+  compute_type: float16
+
+ollama:
+  # Antes de cambiarlo, ejecuta: ollama pull <nombre-del-modelo>
+  model: qwen3:8b
+  host: http://127.0.0.1:11434
+
+cosyvoice:
+  # Debe ser un checkpoint compatible con el AutoModel y el método
+  # inference_cross_lingual de la versión de CosyVoice instalada.
+  model_id: FunAudioLLM/Fun-CosyVoice3-0.5B-2512
+  repo_dir: ~/.local/share/gtaiv-latam-ai-dubber/repos/CosyVoice
+  model_dir: ~/.local/share/gtaiv-latam-ai-dubber/models/Fun-CosyVoice3-0.5B
+  device: cuda
+
+demucs:
+  # htdemucs_ft puede mejorar algunos casos, pero tarda bastante más.
+  model: htdemucs
+  device: cuda
+
+audio:
+  output_bit_depth: 16
+  peak_limit_dbfs: -1.0
