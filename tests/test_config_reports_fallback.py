@@ -29,6 +29,42 @@ def test_speech_hash_ignores_cutscene_only_options(sample_project):
     assert relevant_config_hash(config, "cutscene") != cutscene_before
 
 
+SPEECH_HASH_DOBLADO = "8a90819d335cf020541d5cb6b44b6a22487a72a4c876b50f0dcfa270728b85b0"
+
+
+def test_speech_hash_matches_the_already_dubbed_run():
+    """Las 62.895 voces de speech están dobladas con esta configuración exacta.
+
+    Si este hash cambia, la siguiente ejecución las considera obsoletas y las
+    vuelve a doblar todas. Cualquier cambio que rompa esta prueba tiene que ser
+    una decisión consciente, no un efecto colateral.
+    """
+    default = Path(__file__).resolve().parents[1] / "config" / "default.yaml"
+    config = yaml.safe_load(default.read_text(encoding="utf-8"))
+    assert relevant_config_hash(config, "speech") == SPEECH_HASH_DOBLADO
+
+
+def test_operational_options_stay_out_of_the_hash():
+    """Reintentos y pausas no cambian el audio, así que no deben invalidarlo."""
+    default = Path(__file__).resolve().parents[1] / "config" / "default.yaml"
+    config = yaml.safe_load(default.read_text(encoding="utf-8"))
+    antes = relevant_config_hash(config, "speech")
+    config["ollama"]["request_attempts"] = 99
+    config["ollama"]["retry_pause_seconds"] = 123.0
+    assert relevant_config_hash(config, "speech") == antes
+    # Y el cálculo no debe tocar la configuración que recibe.
+    assert config["ollama"]["request_attempts"] == 99
+
+
+def test_a_real_translation_option_still_invalidates_the_hash():
+    """El guión de la excepción: lo que sí cambia el texto debe invalidar."""
+    default = Path(__file__).resolve().parents[1] / "config" / "default.yaml"
+    config = yaml.safe_load(default.read_text(encoding="utf-8"))
+    antes = relevant_config_hash(config, "speech")
+    config["ollama"]["model"] = "qwen3:14b"
+    assert relevant_config_hash(config, "speech") != antes
+
+
 def test_corrupt_input_metadata(tmp_path):
     path = tmp_path / "bad.wav"
     path.write_bytes(b"not a wav")

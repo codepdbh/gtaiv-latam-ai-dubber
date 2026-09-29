@@ -11,6 +11,7 @@ class TranscriptSegment:
     text: str
     confidence: float | None
     no_speech_probability: float
+    words: tuple[tuple[float, float, str], ...] = ()
 
 
 class WhisperAdapter:
@@ -33,7 +34,11 @@ class WhisperAdapter:
             download_root=download_root,
         )
 
-    def transcribe(self, audio_path: Path) -> list[TranscriptSegment]:
+    def transcribe(
+        self, audio_path: Path, *, word_timestamps: bool = False
+    ) -> list[TranscriptSegment]:
+        """``word_timestamps`` sólo lo piden las cutscenes, para poder repartir el
+        texto cuando dos personajes caen dentro de la misma intervención."""
         self.load()
         raw_segments, _info = self._model.transcribe(
             str(audio_path),
@@ -42,7 +47,7 @@ class WhisperAdapter:
             beam_size=int(self.config.get("beam_size", 5)),
             vad_filter=bool(self.config.get("vad_filter", True)),
             condition_on_previous_text=True,
-            word_timestamps=False,
+            word_timestamps=word_timestamps,
         )
         result = []
         for segment in raw_segments:
@@ -58,6 +63,10 @@ class WhisperAdapter:
                         text=text,
                         confidence=confidence,
                         no_speech_probability=float(segment.no_speech_prob or 0.0),
+                        words=tuple(
+                            (float(word.start), float(word.end), str(word.word))
+                            for word in (getattr(segment, "words", None) or ())
+                        ),
                     )
                 )
         return result

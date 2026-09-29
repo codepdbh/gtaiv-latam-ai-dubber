@@ -25,15 +25,18 @@ El pipeline trabaja completamente en tu PC:
 
 ```text
 WAV original → Whisper → adaptación → clonación → ajuste temporal → WAV final
-            ↘ Demucs (voz/fondo) → SepFormer (hablante A/B) ↗
+            ↘ Demucs (voz/fondo) → ECAPA (quién habla) ↗
 ```
 
 - Transcribe el diálogo inglés con [faster-whisper](https://github.com/SYSTRAN/faster-whisper).
 - Lo adapta a español latino neutral mediante [Ollama](https://ollama.com/) y Qwen.
 - Conserva la identidad vocal con [CosyVoice 3](https://github.com/FunAudioLLM/CosyVoice).
 - En cutscenes separa voz y fondo con [Demucs](https://github.com/facebookresearch/demucs).
-- Separa hasta dos voces simultáneas con
-  [SpeechBrain SepFormer](https://huggingface.co/speechbrain/sepformer-wsj02mix).
+- Identifica qué personaje habla en cada frase de una cutscene con
+  [SpeechBrain ECAPA-TDNN](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb).
+- Opcionalmente separa dos voces simultáneas con
+  [SpeechBrain SepFormer](https://huggingface.co/speechbrain/sepformer-wsj02mix); viene
+  desactivado porque en las escenas del juego hacía más daño que bien (ver más abajo).
 - Reanuda trabajos interrumpidos con SQLite y valida cada resultado antes de publicarlo.
 - Incluye CLI, interfaz PySide6, canarios previos y reportes JSON/CSV.
 
@@ -264,34 +267,93 @@ advierte que tarda aproximadamente cuatro veces más que `htdemucs`. Sólo afect
 Para Speech se procesa cada WAV sin Demucs por defecto. Para cutscenes, el downmix sólo se
 usa en ASR/separación: la reconstrucción parte de todos los canales originales, atenúa la
 voz inglesa estimada y conserva música, efectos y ambiente. Cada segmento traducido se
-ajusta a su ventana temporal y se vuelve a distribuir según la energía de los canales.
+coloca en su ventana temporal y se vuelve a distribuir según la energía de los canales.
+
+### Encaje de cada réplica sin deformar la voz
+
+El español suele ocupar más que el inglés, y CosyVoice habla a su propio ritmo. Estirar cada
+réplica al frame exacto de la original la dejaba arrastrada cuando sobraba tiempo y acelerada
+cuando faltaba. Por eso en cutscenes:
+
+- **La voz nunca se ralentiza.** Si la réplica es más corta que su hueco, lo que sobra es
+  silencio.
+- **Si es más larga, primero ocupa el silencio que la sigue**, hasta `max_overrun_seconds` y
+  sin pisar la réplica siguiente.
+- **Si aun así no cabe, se reescribe con números**: Qwen recibe cuánto dura su versión, cuánto
+  tiempo tiene el personaje y cuántas palabras debe usar como máximo. Se hacen hasta
+  `length_regeneration_attempts` intentos y se queda el que mejor encaja.
+- **Sólo como último recurso se acelera**, nunca más de `hard_max_speedup` (1,35x). Si ni así
+  cabe, la cola se corta con un fundido y el segmento queda en `REVIEW_DURATION`.
+- **Risas, quejidos, huecos minúsculos y frases que quedan igual en español conservan la voz
+  del actor original**, igual que una traducción que Qwen repite en bucle dos veces seguidas.
+  También se descartan las alucinaciones típicas de Whisper sobre música ("You You You...").
+
+La base de datos guarda en `duration_error_pct` la deformación aplicada a cada réplica de
+cutscene (0 = velocidad natural), que es lo que realmente se oye.
 
 La validación exige WAV PCM firmado de 16 bits, legibilidad, sample rate, canales y número
 de frames idénticos al archivo original.
 
 ### Varias personas en una cutscene
 
-Cuando los personajes hablan por turnos, Whisper crea intervalos separados y cada intervalo
-usa su propia referencia vocal. Cuando **dos personas hablan a la vez**, SepFormer divide el
-stem vocal en dos fuentes y Whisper vuelve a transcribirlas por separado. El sistema rechaza
-una segunda fuente casi silenciosa o con texto duplicado —señales habituales de filtración—,
-clona cada voz válida y suma ambos doblajes en su intervalo compartido.
+Una cutscene es una escena larga donde varios personajes se turnan. Whisper no corta por
+hablante, sino por pausas: un mismo intervalo puede contener la réplica de un personaje y la
+respuesta de otro, y a veces parte una frase en dos. Doblar esos bloques tal cual mezcla dos
+timbres en una frase o traduce fragmentos sueltos.
+
+Por eso, tras el ASR:
+
+1. Cada intervalo se corta **sólo en finales de frase** (`.`, `?`, `!`), que es donde cambia
+   quien habla. Nunca a mitad de frase.
+2. Cada frase recibe una huella vocal con
+   [SpeechBrain ECAPA-TDNN](https://huggingface.co/speechbrain/spkrec-ecapa-voxceleb). Sólo las
+   frases de al menos `min_cluster_seconds` fundan personajes; las más cortas dan huellas
+   ruidosas y se asignan al personaje más parecido en lugar de inventar uno nuevo.
+3. Las frases seguidas del mismo personaje se vuelven a unir, y las que Whisper dejó a medias
+   se completan con su continuación.
+
+Cada réplica se clona a partir de su propio audio original. Sólo se fabrica una **referencia
+vocal común** —varias intervenciones del mismo personaje concatenadas— cuando el grupo se
+parece a sí mismo claramente más que al personaje vecino más cercano
+(`profile_min_contrast`). Un umbral absoluto no sirve: la escala de distancias cambia de una
+escena a otra. La referencia común también se usa como reserva cuando una réplica es demasiado
+corta para clonarse desde su propio audio.
+
+El relleno de las referencias nunca invade a los vecinos, y la traducción recibe el diálogo de
+la escena etiquetado por personaje para mantener género gramatical y tratamiento coherentes.
+
+El identificador de voces tiene límites reales con este audio: las voces de personajes
+distintos no quedan muy separadas entre sí, y las frases de teléfono o muy cortas se etiquetan
+peor. Por eso nada depende de acertar la etiqueta: aunque un personaje salga como dos, cada
+réplica suena con la voz de quien la dijo.
+
+Antes se cortaba en una cuadrícula fija de ventanas de 1,5 s (`split_turns: true`). Partía
+frases por la mitad e inventaba personajes: 20 de 22 escenas acababan en el tope de 8 voces.
+Se conserva como opción, pero no se recomienda.
+
+### Voces simultáneas (SepFormer)
+
+SepFormer divide el stem vocal en dos fuentes y Whisper vuelve a transcribirlas por separado.
+Está **desactivado por defecto** (`speaker_separation.enabled: false`): en las escenas del juego
+saltaba en 18-21 intervenciones por escena de diálogo normal por turnos. Whisper alucinaba frases
+sobre la fuente débil y juntaba media conversación en bloques de hasta 69 s con una sola voz. Sin
+él, en un solapamiento real Whisper toma la voz dominante, que es un fallo mucho menor.
 
 La voz inglesa combinada se proyecta sobre los canales físicos, se retira una sola vez al
-100% y después se agregan las voces nuevas. Esto evita tanto el inglés residual como la doble
-sustracción que produciría un solapamiento. Los resultados simultáneos conservan el estado
-`REVIEW_OVERLAP` para facilitar una escucha humana: el modelo abierto está entrenado para dos
-hablantes en inglés y no garantiza separar correctamente tres voces, gritos muy breves o
-diálogo cubierto por efectos fuertes.
+100% y después se agregan las voces nuevas, lo que evita tanto el inglés residual como la doble
+sustracción en los solapamientos.
 
-SepFormer usa CPU por defecto para no competir con Whisper/CosyVoice en una GPU de 8 GB. En
-equipos con más VRAM se puede probar:
+ECAPA (y SepFormer si se activa) usan CPU por defecto para no competir con Whisper/CosyVoice
+en una GPU de 8 GB. En equipos con más VRAM se puede probar:
 
 ```yaml
-speaker_separation:
+diarization:
   enabled: true
   device: cuda
 ```
+
+Con `backend: spectral` todo funciona sin descargar ECAPA, usando una huella log-mel en numpy:
+separa timbres claramente distintos, pero es menos fiable.
 
 ## Desarrollo
 

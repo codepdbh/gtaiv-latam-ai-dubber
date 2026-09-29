@@ -26,12 +26,27 @@ demucs:
   device: cuda
 
 speaker_separation:
-  # SepFormer separa hasta dos voces simultáneas. CPU es más lento pero no
-  # compite por VRAM; usa cuda sólo si tienes memoria suficiente.
-  enabled: true
+  # SepFormer separa hasta dos voces simultáneas. Desactivado: en las escenas
+  # del juego inventaba frases y juntaba conversaciones enteras en una voz (ver
+  # README). CPU es más lento pero no compite por VRAM.
+  enabled: false
   model_id: speechbrain/sepformer-wsj02mix
   model_dir: ~/.local/share/gtaiv-latam-ai-dubber/models/sepformer-wsj02mix
   device: cpu
+
+diarization:
+  # Corta las intervenciones sólo en finales de frase y agrupa por personaje.
+  # Pon backend spectral si prefieres no descargar ECAPA; baja
+  # distance_threshold si dos personajes distintos quedan mezclados, súbelo si
+  # uno se parte en dos.
+  enabled: true
+  backend: ecapa
+  device: cpu
+  distance_threshold: 0.75
+  max_speakers: 8
+  split_turns: false
+  split_sentences: true
+  min_cluster_seconds: 1.5
 
 audio:
   output_bit_depth: 16

@@ -35,14 +35,34 @@ def load_config(project_root: Path, config_path: Path | None = None) -> dict[str
     return config
 
 
+# Ajustes de operación que no pueden cambiar ni una muestra del audio: reintentos,
+# pausas y esperas. Quedan fuera del hash porque si entraran, subir un reintento
+# marcaría como obsoletas las 62.895 voces de speech ya dobladas.
+_HASH_IGNORED: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("ollama", "request_attempts"),
+        ("ollama", "retry_pause_seconds"),
+    }
+)
+
+
 def relevant_config_hash(config: dict[str, Any], mode: str | None = None) -> str:
     clean = {k: v for k, v in config.items() if not k.startswith("_")}
+    for section, key in _HASH_IGNORED:
+        if isinstance(clean.get(section), dict) and key in clean[section]:
+            if clean[section] is config.get(section):
+                clean[section] = dict(clean[section])
+            clean[section].pop(key, None)
     if mode is not None:
         common = {
             "project", "language", "glossary", "whisper", "ollama", "cosyvoice",
             "audio", "alignment", "processing",
         }
-        mode_only = {"cutscenes", "demucs", "speaker_separation"} if mode == "cutscene" else set()
+        mode_only = (
+            {"cutscenes", "demucs", "speaker_separation", "diarization"}
+            if mode == "cutscene"
+            else set()
+        )
         clean = {key: value for key, value in clean.items() if key in common | mode_only}
     payload = json.dumps(clean, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()

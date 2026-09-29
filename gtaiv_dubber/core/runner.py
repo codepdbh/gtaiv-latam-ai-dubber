@@ -9,7 +9,7 @@ from gtaiv_dubber.core.environment import inspect_environment
 from gtaiv_dubber.core.model_manager import ModelManager
 from gtaiv_dubber.core.reports import write_manifests
 from gtaiv_dubber.core.scanner import scan_mode
-from gtaiv_dubber.core.state import Status
+from gtaiv_dubber.core.state import FINAL_STATUSES, REVIEW_STATUSES, Status
 from gtaiv_dubber.pipelines.cutscene_pipeline import CutscenePipeline
 from gtaiv_dubber.pipelines.speech_pipeline import SpeechPipeline
 
@@ -45,6 +45,21 @@ def select_canary(rows, mode: str):
         return min(pool, key=lambda row: (abs(row["duration"] - 4.2), row["relative_path"]))
     candidates = [row for row in rows if 15.0 <= row["duration"] <= 30.0]
     return min(candidates or rows, key=lambda row: (abs(row["duration"] - 20.0), row["relative_path"]))
+
+
+def resume_prefix_length(rows) -> int:
+    """Return the completed prefix without reopening or hashing audio files.
+
+    Rows are already sorted by relative audio name. SQLite is authoritative here
+    because clips classified as silence are completed without an output WAV.
+    """
+    completed_statuses = {status.value for status in FINAL_STATUSES | REVIEW_STATUSES}
+    completed = 0
+    for row in rows:
+        if row["status"] not in completed_statuses:
+            break
+        completed += 1
+    return completed
 
 
 def process_project(
@@ -85,7 +100,13 @@ def process_project(
             logger.info("[SCAN] Canarios aprobados; iniciando cola completa")
             for mode in modes:
                 rows = db.list_files(mode)
-                for index, row in enumerate(rows, 1):
+                resume_at = resume_prefix_length(rows)
+                if resume_at:
+                    logger.info(
+                        "[RESUME] %s: checkpoint %d/%d; continuando en %d sin revalidar audios",
+                        mode, resume_at, len(rows), resume_at + 1,
+                    )
+                for index, row in enumerate(rows[resume_at:], resume_at + 1):
                     if (mode, row["relative_path"]) in processed_paths:
                         continue
                     result = pipelines[mode].process(row)

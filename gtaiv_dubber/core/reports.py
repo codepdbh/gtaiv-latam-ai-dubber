@@ -23,8 +23,9 @@ def write_manifests(db: Database, report_dir: Path) -> list[Path]:
         outputs.extend((csv_path, json_path))
     segments = [
         dict(row) for row in db.connection.execute(
-            """SELECT f.relative_path,s.segment_index,s.segment_start,s.segment_end,s.transcript_en,
-                      s.translation_es,s.generated_duration,s.duration_error_pct,s.status,s.error_message
+            """SELECT f.relative_path,s.segment_index,s.segment_start,s.segment_end,s.speaker_label,
+                      s.transcript_en,s.translation_es,s.generated_duration,s.duration_error_pct,
+                      s.status,s.error_message
                FROM segments s JOIN files f ON f.id=s.file_id ORDER BY f.relative_path,s.segment_index"""
         )
     ]

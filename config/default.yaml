@@ -23,6 +23,11 @@ ollama:
   model: qwen3:8b
   host: http://127.0.0.1:11434
   timeout_seconds: 180
+  # Con keep_alive=0 Ollama recarga 5 GB por línea y bajo presión de memoria
+  # se pasa del plazo: dos líneas perdidas en BR_3 (27/09/2026). El reintento
+  # suele encontrar el modelo ya caliente.
+  request_attempts: 3
+  retry_pause_seconds: 5.0
 
 cosyvoice:
   model: Fun-CosyVoice3-0.5B
@@ -36,16 +41,87 @@ demucs:
   device: cuda
 
 speaker_separation:
-  enabled: true
+  # Desactivado el 27/09/2026. Whisper sobre las pistas separadas alucinaba
+  # frases ("Who is a hero?" en un hueco de 41 s) y juntaba media conversación
+  # en bloques de hasta 69 s que sustituían a las frases buenas, todo con una
+  # sola voz. Saltaba en 18-21 intervenciones por escena: diálogo normal por
+  # turnos, no voces pisadas. Sin él, Whisper toma la voz dominante del
+  # solapamiento, que es un fallo mucho menor.
+  enabled: false
   model_id: speechbrain/sepformer-wsj02mix
   model_dir: ~/.local/share/gtaiv-latam-ai-dubber/models/sepformer-wsj02mix
   # CPU evita competir por los 8 GB de VRAM con Whisper y CosyVoice.
   device: cpu
+  # SepFormer reserva memoria en proporción a la duración de entrada: medido el
+  # 25/09/2026, 1,1 GB con 5 s y 2,7 GB con 30 s. Una cutscene entera (media de
+  # 107 s, máximo 268 s) pedía 7-15 GB y mataba el proceso, así que se separa por
+  # ventanas solapadas y el pico queda fijo en ~1,8 GB.
+  window_seconds: 15.0
+  overlap_seconds: 1.5
   min_overlap_seconds: 0.20
   min_source_rms_ratio: 0.12
   duplicate_similarity: 0.72
   activity_threshold: 0.15
   max_source_correlation: 0.25
+
+# Una cutscene es una escena larga donde varios personajes se turnan e incluso
+# se pisan. Esto recorre la escena por ventanas, corta las intervenciones donde
+# cambia la voz y agrupa por personaje para no mezclar timbres.
+diarization:
+  enabled: true
+  # ecapa usa SpeechBrain; spectral es el respaldo en numpy, sin descargas.
+  backend: ecapa
+  model_id: speechbrain/spkrec-ecapa-voxceleb
+  model_dir: ~/.local/share/gtaiv-latam-ai-dubber/models/spkrec-ecapa-voxceleb
+  # CPU evita competir por los 8 GB de VRAM con Whisper y CosyVoice.
+  device: cpu
+  # Dos decisiones distintas, dos umbrales. distance_threshold decide si dos
+  # turnos separados son el mismo personaje (conservador: equivocarse clona la
+  # voz de otro). change_threshold decide si dentro de una misma intervención
+  # cambia el hablante (sensible: sólo compara ventanas contiguas del mismo
+  # audio). Ambos calibrados sobre IMROM4 con ECAPA.
+  distance_threshold: 0.75
+  change_threshold: 0.70
+  # El respaldo espectral no está calibrado contra audio real, así que además
+  # exige que la escena sea claramente bimodal antes de separar voces.
+  spectral_distance_threshold: 0.32
+  spectral_separation_ratio: 8.0
+  max_speakers: 8
+  # Las ventanas se miden por lotes: una cutscene de cuatro minutos genera casi
+  # 300 y pasarlas juntas a ECAPA agotaba la memoria (25/09/2026).
+  embed_batch_size: 32
+  window_seconds: 1.5
+  hop_seconds: 0.75
+  min_window_seconds: 0.6
+  # Nunca se parte una intervención en trozos más cortos que esto.
+  min_turn_seconds: 0.6
+  # Cortar por cambio de voz en la cuadrícula de ventanas partía frases por la
+  # mitad y, como los trozos no podían reagruparse, inventaba personajes: 20 de
+  # 22 escenas acababan en el tope de 8 voces (27/09/2026). Ahora sólo se corta
+  # en finales de frase, las frases seguidas de la misma voz se vuelven a unir
+  # y las frases que Whisper dejó a medias se completan.
+  split_turns: false
+  split_sentences: true
+  # Sólo las réplicas de al menos esto fundan personajes; las más cortas dan
+  # huellas de voz ruidosas y se asignan al personaje más parecido. Medido sobre
+  # B_1, IMROM4, BR_4, BC_3 y BR_1: de 8/5/8/8/8 voces a 8/4/4/2/6.
+  min_cluster_seconds: 1.5
+  neighbour_guard_seconds: 0.08
+  # Sólo se fabrica una referencia común si el grupo es realmente homogéneo;
+  # ante la duda es más seguro clonar cada línea desde su propio audio.
+  profile_max_intra_distance: 0.55
+  # Criterio que manda cuando hay medida del vecino: el grupo debe parecerse a
+  # sí mismo al menos esto más que al personaje más cercano. Cae en el hueco
+  # medido entre 0,13 (dudosos) y 0,20 (una sola voz).
+  profile_min_contrast: 0.15
+  profile_target_seconds: 6.0
+  profile_max_seconds: 12.0
+  profile_max_windows: 6
+  # Por debajo de esto la voz agrupada no aporta nada sobre el fragmento
+  # suelto. Medido en BC_3 (25/09/2026): con 2.0 dos personajes se
+  # quedaban sin repuesto y perdían siete líneas seguidas.
+  profile_min_seconds: 1.2
+  context_window_lines: 4
 
 audio:
   output_bit_depth: 16
@@ -62,7 +138,24 @@ cutscenes:
   preserve_channel_order: true
   exact_frame_count: true
   reference_padding_seconds: 0.75
+  # CosyVoice rechaza referencias de más de 30 s: un monólogo largo daba una
+  # ventana entera y perdía la línea (25/09/2026).
+  reference_max_seconds: 20.0
   vocal_attenuation: 1.0
+  # Encaje de cada réplica (27/09/2026). Antes se estiraba al frame exacto en
+  # ambos sentidos y sin límite: sobre 509 segmentos, el 56% se deformaba más
+  # de un 20% y el 11% más del doble. Ahora la voz nunca se ralentiza (lo que
+  # sobra es silencio), puede ocupar el silencio que sigue hasta
+  # max_overrun_seconds, y sólo se acelera como último recurso.
+  max_speedup: 1.2
+  hard_max_speedup: 1.35
+  max_overrun_seconds: 0.75
+  # Si la voz no llena ni esta fracción del hueco, se pide una frase más completa.
+  min_fill_ratio: 0.55
+  # Reescrituras con la longitud medida, antes de acelerar nada.
+  length_regeneration_attempts: 2
+  # Huecos más cortos que esto conservan la voz original: eran los peores casos.
+  min_dub_seconds: 0.35
 
 processing:
   resume: true

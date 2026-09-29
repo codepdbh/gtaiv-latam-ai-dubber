@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS segments (
     transcript_en TEXT,
     asr_confidence REAL,
     translation_es TEXT,
+    speaker_label TEXT,
     reference_path TEXT,
     generated_duration REAL,
     duration_error_pct REAL,
@@ -80,7 +81,19 @@ class Database:
         self.connection = sqlite3.connect(path)
         self.connection.row_factory = sqlite3.Row
         self.connection.executescript(SCHEMA)
+        self._migrate()
         self.connection.commit()
+
+    def _migrate(self) -> None:
+        """Añade columnas nuevas a bases ya existentes sin tocar los datos."""
+        for table, column, declaration in (("segments", "speaker_label", "TEXT"),):
+            existing = {
+                row["name"] for row in self.connection.execute(f"PRAGMA table_info({table})")
+            }
+            if column not in existing:
+                self.connection.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column} {declaration}"
+                )
 
     def close(self) -> None:
         self.connection.close()
@@ -168,14 +181,16 @@ class Database:
                     """
                     INSERT INTO segments(
                         file_id,segment_index,segment_start,segment_end,transcript_en,
-                        asr_confidence,translation_es,reference_path,generated_duration,
-                        duration_error_pct,status,error_message,created_at,updated_at
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        asr_confidence,translation_es,speaker_label,reference_path,
+                        generated_duration,duration_error_pct,status,error_message,
+                        created_at,updated_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         file_id, index, segment["start"], segment["end"], segment.get("text"),
                         segment.get("confidence"), segment.get("translation_es"),
-                        segment.get("reference_path"), segment.get("generated_duration"),
+                        segment.get("speaker_label"), segment.get("reference_path"),
+                        segment.get("generated_duration"),
                         segment.get("duration_error_pct"), segment.get("status", "TRANSCRIBED"),
                         segment.get("error_message"), now, now,
                     ),
@@ -183,8 +198,8 @@ class Database:
 
     def update_segment(self, file_id: int, index: int, **changes) -> None:
         allowed = {
-            "translation_es", "reference_path", "generated_duration", "duration_error_pct",
-            "status", "error_message",
+            "translation_es", "speaker_label", "reference_path", "generated_duration",
+            "duration_error_pct", "status", "error_message",
         }
         unknown = set(changes) - allowed
         if unknown:

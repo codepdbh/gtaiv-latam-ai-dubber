@@ -30,7 +30,10 @@ def time_stretch_ffmpeg(
 ) -> np.ndarray:
     current = len(audio)
     if current == target_frames:
-        return np.asarray(audio, dtype=np.float32)
+        # Pasa por fit_frame_count igual que las demás vías: esta devolvía el
+        # array tal cual, y si venía en una dimensión el llamante fallaba al
+        # pedirle el canal. Ocurre solo cuando la duración coincide al frame.
+        return fit_frame_count(audio, target_frames)
     temp_dir.mkdir(parents=True, exist_ok=True)
     source = temp_dir / "stretch_source.wav"
     target = temp_dir / "stretch_target.wav"
@@ -72,3 +75,48 @@ def align_to_duration(
     aligned = time_stretch_ffmpeg(audio, sample_rate, target_frames, temp_dir)
     return aligned, error_pct
 
+
+
+def fit_dialogue(
+    audio: np.ndarray,
+    sample_rate: int,
+    slot_seconds: float,
+    room_seconds: float,
+    temp_dir: Path,
+    *,
+    hard_max_speedup: float = 1.35,
+    fade_seconds: float = 0.04,
+) -> tuple[np.ndarray, float, bool]:
+    """Encaja una réplica doblada en su hueco sin deformar la voz.
+
+    Devuelve el audio en 2D, el tempo aplicado y si hubo que recortar la cola.
+    El audio puede ser más largo que el hueco: ocupa el silencio que le sigue.
+
+    ``align_to_duration`` estiraba cada línea al frame exacto en ambos sentidos
+    y sin límite. Medido el 27/09/2026 sobre 509 segmentos: el 42% se
+    ralentizaba (voz arrastrada) y el 46% se comprimía, un 11% más del doble.
+    Aquí la voz más corta que su hueco conserva su velocidad y se rellena con
+    silencio, y la más larga ocupa primero el silencio siguiente (``room``);
+    sólo si aun así no cabe se acelera, y nunca más de ``hard_max_speedup``.
+    """
+    data = np.asarray(audio, dtype=np.float32)
+    if data.ndim == 1:
+        data = data[:, None]
+    slot = max(1, round(slot_seconds * sample_rate))
+    room = max(slot, round(room_seconds * sample_rate))
+    current = len(data)
+    if current <= slot:
+        return fit_frame_count(data, slot), 1.0, False
+    if current <= room:
+        return data, 1.0, False
+    tempo = min(current / room, float(hard_max_speedup))
+    stretched = time_stretch_ffmpeg(data, sample_rate, max(1, round(current / tempo)), temp_dir)
+    if len(stretched) <= room:
+        return stretched, tempo, False
+    # Último recurso: la traducción no cabe ni acelerada al máximo tolerable.
+    # Se corta con un fundido corto para que no chasquee; el segmento queda
+    # marcado para revisión.
+    trimmed = stretched[:room].copy()
+    fade = min(len(trimmed), max(1, round(fade_seconds * sample_rate)))
+    trimmed[-fade:] *= np.linspace(1.0, 0.0, fade, dtype=np.float32)[:, None]
+    return trimmed, tempo, True

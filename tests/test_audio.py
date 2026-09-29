@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from gtaiv_dubber.audio.alignment import atempo_chain, fit_frame_count, time_stretch_ffmpeg
 from gtaiv_dubber.audio.metadata import read_wav_metadata
@@ -131,3 +132,22 @@ def test_original_segment_is_replaced_by_two_simultaneous_sources():
     ]
     result = replace_overlapped_segments(original, simultaneous)
     assert [item["text"] for item in result] == ["one", "two"]
+
+
+def test_align_to_duration_always_returns_two_dimensions(tmp_path):
+    """El pipeline de cutscenes pide aligned[:, 0]; una salida 1-D lo rompia."""
+    import numpy as np
+
+    from gtaiv_dubber.audio.alignment import align_to_duration
+
+    rate = 24000
+    mono = np.sin(2 * np.pi * 220 * np.arange(rate) / rate).astype(np.float32)
+
+    exact, error = align_to_duration(mono, rate, 1.0, tmp_path)
+    assert exact.ndim == 2 and exact.shape[1] == 1
+    assert exact[:, 0].shape == (rate,)
+    assert error == pytest.approx(0.0, abs=1e-6)
+
+    stretched, _ = align_to_duration(mono, rate, 1.5, tmp_path)
+    assert stretched.ndim == 2
+    assert stretched[:, 0].shape[0] == int(1.5 * rate)
