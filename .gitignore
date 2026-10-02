@@ -23,6 +23,7 @@ config/local.yaml
 # Audio generado
 /Speech_es/
 /Cutscenes_es/
+/scripted_speech/
 
 # Estado, temporales, modelos, reportes y registros locales
 /work/*
