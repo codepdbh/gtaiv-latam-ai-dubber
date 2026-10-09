@@ -24,6 +24,7 @@ config/local.yaml
 /Speech_es/
 /Cutscenes_es/
 /scripted_speech/
+/scripted_speech_es/
 
 # Estado, temporales, modelos, reportes y registros locales
 /work/*

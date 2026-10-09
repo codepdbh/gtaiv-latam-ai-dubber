@@ -10,6 +10,10 @@ from typing import Callable
 Validator = Callable[[Path], None]
 
 
+def _same_filesystem(first: Path, second: Path) -> bool:
+    return first.stat().st_dev == second.stat().st_dev
+
+
 def atomic_publish(
     destination: Path,
     temp_root: Path,
@@ -18,8 +22,11 @@ def atomic_publish(
 ) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temp_root.mkdir(parents=True, exist_ok=True)
+    # os.replace is atomic only within one filesystem. WSL commonly keeps work/
+    # on ext4 while a user's project/output lives on a mounted Windows drive.
+    staging_root = temp_root if _same_filesystem(temp_root, destination.parent) else destination.parent
     fd, name = tempfile.mkstemp(
-        prefix=f"{destination.stem}.", suffix=".tmp.wav", dir=temp_root
+        prefix=f"{destination.stem}.", suffix=".tmp.wav", dir=staging_root
     )
     os.close(fd)
     temporary = Path(name)

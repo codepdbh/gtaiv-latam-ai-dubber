@@ -146,6 +146,21 @@ bash scripts/gui.sh /mnt/d/Juegos/audiosgtaiv
 Desde Windows están disponibles `RUN_GTAIV_DUBBER.bat`, `RUN_GTAIV_GUI.bat` y
 `STATUS_GTAIV_DUBBER.bat`.
 
+### Doblar `scripted_speech` por separado
+
+Si extraíste los diálogos guionizados en `scripted_speech/`, inicia su propia cola desde
+WSL para que use un checkpoint independiente y no se mezcle con `Speech` ni `Cutscenes`:
+
+```bash
+bash scripts/start_scripted_speech.sh
+bash scripts/status_scripted_speech.sh
+```
+
+La entrada original queda intacta; los WAV doblados se guardan en `scripted_speech_es/`.
+También puedes indicar rutas distintas como argumentos: primero la carpeta de entrada y
+luego la carpeta de salida. La cola pasa un canario y después procesa el resto, y se puede
+reanudar ejecutando de nuevo el comando de inicio.
+
 ## Comandos útiles
 
 ```bash

@@ -5,6 +5,7 @@ import pytest
 from gtaiv_dubber.audio.metadata import read_wav_metadata
 from gtaiv_dubber.audio.validation import validate_wav
 from gtaiv_dubber.core.database import Database
+from gtaiv_dubber.utils import atomic
 from gtaiv_dubber.utils.atomic import atomic_copy_wav, atomic_publish
 from gtaiv_dubber.utils.hashing import sha256_file
 
@@ -39,6 +40,20 @@ def test_atomic_failure_does_not_replace_existing(wav_factory, tmp_path):
     with pytest.raises(ValueError):
         atomic_publish(destination, tmp_path / "tmp", producer, lambda _p: (_ for _ in ()).throw(ValueError("bad")))
     assert sha256_file(destination) == before
+
+
+def test_atomic_publish_stages_on_destination_filesystem(tmp_path, monkeypatch):
+    destination = tmp_path / "mounted-drive" / "output.wav"
+    temp_root = tmp_path / "linux-work" / "tmp"
+    monkeypatch.setattr(atomic, "_same_filesystem", lambda _first, _second: False)
+
+    def producer(path):
+        assert path.parent == destination.parent
+        path.write_bytes(b"ready")
+
+    atomic_publish(destination, temp_root, producer, lambda path: path.read_bytes() == b"ready" or pytest.fail())
+    assert destination.read_bytes() == b"ready"
+    assert not list(destination.parent.glob("*.tmp.wav"))
 
 
 def test_sqlite_upsert_and_status(sample_project):
