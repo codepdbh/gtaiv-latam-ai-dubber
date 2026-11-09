@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import sys
+from contextlib import contextmanager
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
+
+from gtaiv_dubber.audio.io import mono_mix, read_audio, write_pcm16
+from gtaiv_dubber.audio.resampling import resample_audio
 
 
 class CosyVoiceAdapter:
@@ -11,6 +16,21 @@ class CosyVoiceAdapter:
         self.config = config
         self._model = None
         self.sample_rate = 24000
+
+    @contextmanager
+    def _model_reference(self, reference_audio: Path):
+        # CosyVoice's prompt loaders reject low-rate game audio (e.g. 8 kHz).
+        # Resample only a temporary reference, never the source or final WAV.
+        import soundfile as sf
+
+        if sf.info(reference_audio).samplerate >= 24000:
+            yield reference_audio
+            return
+        audio, rate = read_audio(reference_audio)
+        with TemporaryDirectory(prefix="cosyvoice-reference-") as directory:
+            prepared = Path(directory) / "reference.wav"
+            write_pcm16(prepared, resample_audio(mono_mix(audio), rate, 24000), 24000)
+            yield prepared
 
     def load(self) -> None:
         if self._model is not None:
@@ -64,11 +84,12 @@ class CosyVoiceAdapter:
             raise ValueError("Texto TTS vacío")
         tts_text = f"You are a helpful assistant.<|endofprompt|>{spoken_text}"
         chunks = []
-        for result in self._model.inference_cross_lingual(
-            tts_text, str(reference_audio), stream=False, text_frontend=False
-        ):
-            tensor = result["tts_speech"].detach().float().cpu().numpy().reshape(-1)
-            chunks.append(tensor)
+        with self._model_reference(reference_audio) as prepared_reference:
+            for result in self._model.inference_cross_lingual(
+                tts_text, str(prepared_reference), stream=False, text_frontend=False
+            ):
+                tensor = result["tts_speech"].detach().float().cpu().numpy().reshape(-1)
+                chunks.append(tensor)
         if not chunks:
             raise RuntimeError("CosyVoice no produjo audio")
         return np.concatenate(chunks).astype(np.float32), self.sample_rate

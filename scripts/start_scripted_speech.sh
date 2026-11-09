@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CODE_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 INPUT_ROOT="${1:-$CODE_ROOT/scripted_speech}"
 OUTPUT_ROOT="${2:-$CODE_ROOT/scripted_speech_es}"
-JOB_ROOT="$RUNTIME_ROOT/jobs/scripted_speech"
+JOB_ROOT="${GTAIV_DUBBER_JOB_ROOT:-$RUNTIME_ROOT/jobs/scripted_speech}"
 PID_FILE="$JOB_ROOT/work/process.pid"
 LOG_POINTER="$JOB_ROOT/work/process.log.path"
 LOG_DIR="$JOB_ROOT/logs"
@@ -55,7 +55,7 @@ process_is_active() {
 }
 
 if [[ -s "$PID_FILE" ]] && process_is_active "$(<"$PID_FILE")"; then
-  echo "El doblaje de scripted_speech ya está activo (PID $(<"$PID_FILE"))."
+  echo "El doblaje de $(basename "$JOB_ROOT") ya está activo (PID $(<"$PID_FILE"))."
   [[ -s "$LOG_POINTER" ]] && echo "Log: $(<"$LOG_POINTER")"
   exit 0
 fi
@@ -89,7 +89,7 @@ if ! process_is_active "$run_pid"; then
   exit 1
 fi
 
-echo "Doblaje de scripted_speech iniciado (PID $run_pid)."
+echo "Doblaje de $(basename "$JOB_ROOT") iniciado (PID $run_pid)."
 echo "Entrada: $INPUT_ROOT"
 echo "Salida:  $OUTPUT_ROOT"
 echo "Estado/checkpoint: $JOB_ROOT/work/state.sqlite3"
